@@ -24,13 +24,7 @@ var (
 	usetimeRegex                = regexp.MustCompile(`\\'id\\':\\'(\d+-\d+-\d+-\d+\.\d+\.\d+\.\d+)\\'`)
 )
 
-type AccountStatement = jbparser.AccountStatement
-type Node = *html.Node
-type AccountInfo = jbparser.AccountInfo
-type Transaction = jbparser.Transaction
-type Amount = money.Amount
-
-func parseTransaction(node Node, info AccountInfo) (t Transaction, err error) {
+func parseTransaction(node *html.Node, info jbparser.AccountInfo) (t jbparser.Transaction, err error) {
 
 	t.UseDate, err = getUseDate(node)
 	if err != nil {
@@ -76,33 +70,35 @@ func parseTransaction(node Node, info AccountInfo) (t Transaction, err error) {
 	return t, nil
 }
 
-func Parse(r io.Reader) (AccountStatement, error) {
+// Parse reads a webpage stream and parses it
+func Parse(r io.Reader) (jbparser.AccountStatement, error) {
 	doc, err := html.Parse(r)
 	if err != nil {
-		return AccountStatement{}, err
+		return jbparser.AccountStatement{}, err
 	}
 
 	return ParseHTML(doc)
 }
 
-func ParseHTML(node Node) (AccountStatement, error) {
+// ParseHTML parses a webpage
+func ParseHTML(node *html.Node) (jbparser.AccountStatement, error) {
 
 	info, err := getAccountInfo(node)
 	if err != nil {
-		return AccountStatement{}, err
+		return jbparser.AccountStatement{}, err
 	}
 
 	// Find the div that contains the transactions
-	transactions := []Transaction{}
+	transactions := []jbparser.Transaction{}
 	for _, elem := range getTransactions(node) {
 		transaction, err := parseTransaction(elem, info)
 		if err != nil {
-			return AccountStatement{}, err
+			return jbparser.AccountStatement{}, err
 		}
 		transactions = append(transactions, transaction)
 	}
 
-	return AccountStatement{
+	return jbparser.AccountStatement{
 		Info:         info,
 		Transactions: transactions,
 	}, nil
@@ -110,11 +106,11 @@ func ParseHTML(node Node) (AccountStatement, error) {
 
 // #region Parse Page
 
-func getAccountInfo(node Node) (AccountInfo, error) {
+func getAccountInfo(node *html.Node) (jbparser.AccountInfo, error) {
 	//account-selector-chosen
 	elem := htmlquery.FindOne(node, ".//div[contains(@class, 'account-selector-chosen')]")
 	if elem == nil {
-		return AccountInfo{}, fmt.Errorf("can't locate master")
+		return jbparser.AccountInfo{}, fmt.Errorf("can't locate master")
 	}
 
 	name := strings.TrimSpace(htmlquery.InnerText(elem))
@@ -122,7 +118,7 @@ func getAccountInfo(node Node) (AccountInfo, error) {
 	//account-selector-name-and-number
 	elems := htmlquery.Find(node, ".//div[contains(@class, 'account-selector-name-and-number')]")
 	if len(elems) < 1 {
-		return AccountInfo{}, fmt.Errorf("can't locate master")
+		return jbparser.AccountInfo{}, fmt.Errorf("can't locate master")
 	}
 	for _, el := range elems {
 		if strings.TrimSpace(htmlquery.InnerText(htmlquery.FindOne(el, ".//div[contains(@class, 'account-selector-account-name')]"))) == name {
@@ -130,14 +126,14 @@ func getAccountInfo(node Node) (AccountInfo, error) {
 			nums := strings.Split(num, " ")
 			reg, err := strconv.ParseUint(nums[0], 10, 64)
 			if err != nil {
-				return AccountInfo{}, fmt.Errorf("can't locate master")
+				return jbparser.AccountInfo{}, fmt.Errorf("can't locate master")
 			}
 			account, err := strconv.ParseUint(nums[1], 10, 64)
 			if err != nil {
-				return AccountInfo{}, fmt.Errorf("can't locate master")
+				return jbparser.AccountInfo{}, fmt.Errorf("can't locate master")
 			}
 
-			return AccountInfo{
+			return jbparser.AccountInfo{
 				Name:   name,
 				Reg:    reg,
 				Number: account,
@@ -145,10 +141,10 @@ func getAccountInfo(node Node) (AccountInfo, error) {
 		}
 	}
 
-	return AccountInfo{}, fmt.Errorf("can't locate master")
+	return jbparser.AccountInfo{}, fmt.Errorf("can't locate master")
 }
 
-func getTransactions(node Node) []Node {
+func getTransactions(node *html.Node) []*html.Node {
 	return htmlquery.Find(node, "(.//ul[contains(@class, 'old-postings')])[1]/div")
 }
 
@@ -248,7 +244,7 @@ func getAccount(node *html.Node) (string, error) {
 	return strings.TrimSpace(htmlquery.InnerText(elem)), nil
 }
 
-func getAmount(node *html.Node) (Amount, error) {
+func getAmount(node *html.Node) (money.Amount, error) {
 	// Find element <input class="... posting-amount ...">
 	elem := htmlquery.FindOne(node, ".//div[contains(@class, 'posting-amount')]")
 	if elem == nil {
@@ -262,7 +258,7 @@ func getAmount(node *html.Node) (Amount, error) {
 
 }
 
-func getBalance(node *html.Node) (Amount, error) {
+func getBalance(node *html.Node) (money.Amount, error) {
 	// Find element <input class="... posting-balance ...">
 	elem := htmlquery.FindOne(node, ".//div[contains(@class, 'posting-balance')]")
 	if elem == nil {
