@@ -1,10 +1,13 @@
 package cmd
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/KalleDK/go-jbparser/jbparser"
 	"github.com/KalleDK/go-jbparser/jbparser/jbpage"
@@ -26,9 +29,16 @@ and usage of using your command. For example:
 Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		printTransactions(args[0], dumpTimes, dumpReverse)
+		var account jbparser.AccountStatement
+		if len(args) == 0 {
+			account = stdinAccount()
+
+		} else {
+			account = loadAccount(args[0])
+		}
+		printTransactions(account, dumpTimes, dumpReverse)
 	},
 }
 
@@ -77,22 +87,61 @@ func printTable(w io.Writer, formats []tFormat, d [][]string) {
 	table.Render()
 }
 
-func printTransactions(path string, n int, reverse bool) {
-	account := func(path string) jbparser.AccountStatement {
-		filePath := path
-		fp, err := os.Open(filePath)
-		if err != nil {
-			log.Fatal(err)
+func stdinAccount() jbparser.AccountStatement {
+	fmt.Println("Paste html:")
+	buffer := &bytes.Buffer{}
+	scanner := bufio.NewScanner(os.Stdin)
+	for scanner.Scan() {
+		d := []byte(scanner.Text())
+		lt := len(d)
+		if lt < 1 {
+			continue
 		}
-		defer fp.Close()
-
-		account, err := jbpage.Parse(fp)
-		if err != nil {
-			log.Fatal(err)
+		if d[lt-1] == 24 {
+			break
 		}
+		if lt >= 7 {
+			/*
+				if string(d[lt-7:]) == "</html>" {
+					break
+				}
+			*/
+			if strings.Contains(string(d), "</html>") {
+				break
+			}
+		}
+		buffer.Write(d)
+	}
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintln(os.Stderr, "reading standard input:", err)
+	}
+	account, err := jbpage.Parse(buffer)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-		return account
-	}(path)
+	return account
+}
+
+func loadAccount(path string) jbparser.AccountStatement {
+
+	filePath := path
+	fp, err := os.Open(filePath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer fp.Close()
+
+	account, err := jbpage.Parse(fp)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return account
+
+}
+
+func printTransactions(account jbparser.AccountStatement, n int, reverse bool) {
 
 	tableFormat := []tFormat{
 		{"Reg", aLeft},
