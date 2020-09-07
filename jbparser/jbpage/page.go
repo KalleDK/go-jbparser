@@ -37,7 +37,6 @@ func parseTransaction(node *html.Node, info jbparser.AccountInfo) (t jbparser.Tr
 	}
 
 	t.Account = info
-	//t.Account, err = getAccount(node)
 	if err != nil {
 		return
 	}
